@@ -481,8 +481,7 @@ impl AirWalletApp {
                 ui.add_space(8.0);
 
                 if let Some(index) = self.pending_pin_focus.take() {
-                    let id = ui.make_persistent_id(("parent_pin_digit", index));
-                    ui.memory_mut(|memory| memory.request_focus(id));
+                    ui.memory_mut(|memory| memory.request_focus(pin_digit_id(index)));
                 }
 
                 let enter_pressed = ui.input(|input| input.key_pressed(egui::Key::Enter));
@@ -493,11 +492,10 @@ impl AirWalletApp {
                     ui.add_space(((ui.available_width() - pin_entry_width) / 2.0).max(0.0));
 
                     for index in 0..PIN_LENGTH {
-                        let id = ui.make_persistent_id(("parent_pin_digit", index));
                         let response = ui.add_sized(
                             [64.0, 68.0],
                             egui::TextEdit::singleline(&mut self.pin_digits[index])
-                                .id(id)
+                                .id(pin_digit_id(index))
                                 .password(true)
                                 .font(egui::TextStyle::Heading)
                                 .horizontal_align(egui::Align::Center)
@@ -958,6 +956,10 @@ fn parse_dollars_to_cents(input: &str) -> Result<i64, String> {
 
 fn valid_pin(pin: &str) -> bool {
     pin.len() == 4 && pin.chars().all(|character| character.is_ascii_digit())
+}
+
+fn pin_digit_id(index: usize) -> egui::Id {
+    egui::Id::new(("parent_pin_digit", index))
 }
 
 fn valid_child_name(name: &str) -> bool {
