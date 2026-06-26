@@ -210,6 +210,16 @@ impl CofferlyApp {
         self.status = "Locked. Enter the parent PIN to make changes.".to_string();
     }
 
+    /// Helper to reduce repetition in the settings panels.
+    fn grouped_row<F: FnOnce(&mut egui::Ui)>(ui: &mut egui::Ui, label: &str, f: F) {
+        egui::Frame::group(ui.style()).show(ui, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                ui.label(RichText::new(label).strong());
+                f(ui);
+            });
+        });
+    }
+
     fn entered_parent_pin(&self) -> String {
         self.pin_digits.concat()
     }
@@ -703,116 +713,101 @@ impl CofferlyApp {
     }
 
     fn quick_actions(&mut self, ui: &mut egui::Ui) {
-        egui::Frame::group(ui.style()).show(ui, |ui| {
-            ui.horizontal_wrapped(|ui| {
-                ui.label(RichText::new("Quick add").strong());
+        Self::grouped_row(ui, "Quick add", |ui| {
+            if ui.button("+$5").clicked() {
+                self.quick_entry("Allowance", 500, EntryKind::Deposit);
+            }
+            if ui.button("+$10").clicked() {
+                self.quick_entry("Allowance", 1000, EntryKind::Deposit);
+            }
+            if ui.button("+$20").clicked() {
+                self.quick_entry("Gift", 2000, EntryKind::Deposit);
+            }
+            if ui.button("+$50").clicked() {
+                self.quick_entry("Gift", 5000, EntryKind::Deposit);
+            }
 
-                if ui.button("+$5").clicked() {
-                    self.quick_entry("Allowance", 500, EntryKind::Deposit);
-                }
-                if ui.button("+$10").clicked() {
-                    self.quick_entry("Allowance", 1000, EntryKind::Deposit);
-                }
-                if ui.button("+$20").clicked() {
-                    self.quick_entry("Gift", 2000, EntryKind::Deposit);
-                }
-                if ui.button("+$50").clicked() {
-                    self.quick_entry("Gift", 5000, EntryKind::Deposit);
-                }
+            ui.separator();
 
-                ui.separator();
-
-                if ui.button("-$5").clicked() {
-                    self.quick_entry("Game purchase", 500, EntryKind::Deduction);
-                }
-                if ui.button("-$10").clicked() {
-                    self.quick_entry("Purchase", 1000, EntryKind::Deduction);
-                }
-                if ui.button("-$15").clicked() {
-                    self.quick_entry("Purchase", 1500, EntryKind::Deduction);
-                }
-            });
+            if ui.button("-$5").clicked() {
+                self.quick_entry("Game purchase", 500, EntryKind::Deduction);
+            }
+            if ui.button("-$10").clicked() {
+                self.quick_entry("Purchase", 1000, EntryKind::Deduction);
+            }
+            if ui.button("-$15").clicked() {
+                self.quick_entry("Purchase", 1500, EntryKind::Deduction);
+            }
         });
     }
 
     fn wallet_settings(&mut self, ui: &mut egui::Ui) {
         let selected_child_name = self.selected_wallet().child_name.clone();
 
-        egui::Frame::group(ui.style()).show(ui, |ui| {
-            ui.horizontal_wrapped(|ui| {
-                ui.label(RichText::new("Child names").strong());
-                ui.label("Rename selected");
-                ui.add_sized(
-                    [170.0, 24.0],
-                    egui::TextEdit::singleline(&mut self.child_name_input)
-                        .hint_text(selected_child_name),
-                );
-                if ui.button("Rename").clicked() {
-                    self.rename_selected_child();
-                }
+        Self::grouped_row(ui, "Child names", |ui| {
+            ui.label("Rename selected");
+            ui.add_sized(
+                [170.0, 24.0],
+                egui::TextEdit::singleline(&mut self.child_name_input)
+                    .hint_text(selected_child_name),
+            );
+            if ui.button("Rename").clicked() {
+                self.rename_selected_child();
+            }
 
-                ui.separator();
+            ui.separator();
 
-                ui.label("Add wallet");
-                ui.add_sized(
-                    [170.0, 24.0],
-                    egui::TextEdit::singleline(&mut self.new_child_name_input)
-                        .hint_text("Child name"),
-                );
-                if ui.button("Add child").clicked() {
-                    self.add_child_wallet();
-                }
-            });
+            ui.label("Add wallet");
+            ui.add_sized(
+                [170.0, 24.0],
+                egui::TextEdit::singleline(&mut self.new_child_name_input).hint_text("Child name"),
+            );
+            if ui.button("Add child").clicked() {
+                self.add_child_wallet();
+            }
         });
     }
 
     fn balance_tools(&mut self, ui: &mut egui::Ui) {
-        egui::Frame::group(ui.style()).show(ui, |ui| {
-            ui.horizontal_wrapped(|ui| {
-                ui.label(RichText::new("Starting balance").strong());
-                ui.add_sized(
-                    [110.0, 24.0],
-                    egui::TextEdit::singleline(&mut self.starting_balance_input).hint_text("90.00"),
-                );
+        Self::grouped_row(ui, "Starting balance", |ui| {
+            ui.add_sized(
+                [110.0, 24.0],
+                egui::TextEdit::singleline(&mut self.starting_balance_input).hint_text("90.00"),
+            );
 
-                if ui.button("Update").clicked() {
-                    self.update_starting_balance();
-                }
+            if ui.button("Update").clicked() {
+                self.update_starting_balance();
+            }
 
-                ui.separator();
+            ui.separator();
 
-                if ui.button("Remove latest entry").clicked() {
-                    self.remove_latest_entry();
-                }
-            });
+            if ui.button("Remove latest entry").clicked() {
+                self.remove_latest_entry();
+            }
         });
     }
 
     fn entry_form(&mut self, ui: &mut egui::Ui) {
-        egui::Frame::group(ui.style()).show(ui, |ui| {
-            ui.horizontal_wrapped(|ui| {
-                ui.label(RichText::new("New entry").strong());
+        Self::grouped_row(ui, "New entry", |ui| {
+            ui.selectable_value(&mut self.draft.kind, EntryKind::Deposit, "Deposit");
+            ui.selectable_value(&mut self.draft.kind, EntryKind::Deduction, "Deduction");
 
-                ui.selectable_value(&mut self.draft.kind, EntryKind::Deposit, "Deposit");
-                ui.selectable_value(&mut self.draft.kind, EntryKind::Deduction, "Deduction");
+            ui.label("Description");
+            ui.add_sized(
+                [280.0, 24.0],
+                egui::TextEdit::singleline(&mut self.draft.description)
+                    .hint_text("Game, birthday, allowance"),
+            );
 
-                ui.label("Description");
-                ui.add_sized(
-                    [280.0, 24.0],
-                    egui::TextEdit::singleline(&mut self.draft.description)
-                        .hint_text("Game, birthday, allowance"),
-                );
+            ui.label("Amount");
+            ui.add_sized(
+                [110.0, 24.0],
+                egui::TextEdit::singleline(&mut self.draft.amount).hint_text("10.00"),
+            );
 
-                ui.label("Amount");
-                ui.add_sized(
-                    [110.0, 24.0],
-                    egui::TextEdit::singleline(&mut self.draft.amount).hint_text("10.00"),
-                );
-
-                if ui.button("Add entry").clicked() {
-                    self.add_entry();
-                }
-            });
+            if ui.button("Add entry").clicked() {
+                self.add_entry();
+            }
         });
     }
 
