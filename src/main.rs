@@ -3,6 +3,7 @@ use eframe::egui;
 use eframe::egui::{Color32, RichText};
 use std::path::PathBuf;
 
+mod crypto;
 mod data;
 mod io;
 mod money;
@@ -23,7 +24,7 @@ use data::{
     default_app_data, valid_cents, valid_child_name, valid_pin, AppData, Entry, EntryKind,
     LedgerSort, Wallet,
 };
-use io::{data_path, load_app_data_with_legacy, save_app_data};
+use io::{data_path, load_app_data_with_legacy, save_app_data, save_encrypted};
 use money::{format_money, format_money_input, parse_dollars_to_cents};
 use print_html::{ledger_file_stem, write_printable_ledger};
 use theme::{amount_color, app_icon, balance_color, configure_style};
@@ -55,6 +56,7 @@ struct EntryDraft {
 
 struct CofferlyApp {
     data: AppData,
+    raw_bytes: Option<Vec<u8>>,
     selected_wallet: usize,
     ledger_sort: LedgerSort,
     draft: EntryDraft,
@@ -75,26 +77,49 @@ impl CofferlyApp {
         configure_style(&cc.egui_ctx);
 
         let data_path = data_path();
-        let (data, save_enabled, status) = match load_app_data_with_legacy(&data_path) {
-            Ok(Some(data)) => (
-                data,
-                true,
-                "Enter the parent PIN to unlock Cofferly.".to_string(),
-            ),
-            Ok(None) => (
+        let raw_bytes = io::load_raw(&data_path);
+
+        // Try to load as plain JSON for backward compat / first run.
+        // If the file is encrypted, we'll decrypt it on successful PIN entry.
+        let (data, save_enabled, status) = if let Some(bytes) = &raw_bytes {
+            if crypto::is_encrypted(bytes) {
+                // Encrypted file — we will decrypt after PIN entry.
+                // Use defaults until unlocked.
+                (
+                    default_app_data(),
+                    true,
+                    "Enter the parent PIN to unlock Cofferly.".to_string(),
+                )
+            } else {
+                match load_app_data_with_legacy(&data_path) {
+                    Ok(Some(data)) => (
+                        data,
+                        true,
+                        "Enter the parent PIN to unlock Cofferly.".to_string(),
+                    ),
+                    Ok(None) => (
+                        default_app_data(),
+                        true,
+                        "Enter the parent PIN to unlock Cofferly.".to_string(),
+                    ),
+                    Err(err) => (
+                        default_app_data(),
+                        false,
+                        format!("Could not load saved data: {err}. Changes are disabled."),
+                    ),
+                }
+            }
+        } else {
+            (
                 default_app_data(),
                 true,
                 "Enter the parent PIN to unlock Cofferly.".to_string(),
-            ),
-            Err(err) => (
-                default_app_data(),
-                false,
-                format!("Could not load saved data: {err}. Changes are disabled."),
-            ),
+            )
         };
 
         Self {
             data,
+            raw_bytes,
             selected_wallet: 0,
             ledger_sort: LedgerSort::NewestFirst,
             draft: EntryDraft {
@@ -124,9 +149,57 @@ impl CofferlyApp {
     }
 
     fn unlock_parent(&mut self) {
-        if self.entered_parent_pin() == self.data.parent_pin {
+        let entered = self.entered_parent_pin();
+
+        // Try encrypted path first
+        if let Some(raw) = &self.raw_bytes {
+            if crypto::is_encrypted(raw) {
+                match crypto::decrypt(raw, &entered) {
+                    Ok(plain) => {
+                        if let Ok(loaded) = serde_json::from_slice::<AppData>(&plain) {
+                            if let Some(normalized) = data::normalize_app_data(loaded) {
+                                // Successful decrypt with this PIN proves it was correct.
+                                self.data = normalized;
+                                self.parent_unlocked = true;
+                                self.clear_pin_digits();
+                                self.status = "Parent mode unlocked.".to_string();
+                                return;
+                            }
+                        }
+                    }
+                    Err(_) => {}
+                }
+                self.clear_pin_digits();
+                self.status = "Wrong PIN or data has been tampered with.".to_string();
+                return;
+            }
+        }
+
+        // Legacy plain JSON path (or first run after migration)
+        if entered == self.data.parent_pin {
             self.parent_unlocked = true;
             self.clear_pin_digits();
+
+            // Auto-migrate plain data file to encrypted format immediately.
+            // This is important when copying an old data file to another computer.
+            if let Some(raw) = &self.raw_bytes {
+                if !crypto::is_encrypted(raw) {
+                    match save_encrypted(&self.data_path, &self.data, &entered) {
+                        Ok(()) => {
+                            self.status =
+                                "Parent mode unlocked (data file migrated to encrypted format)."
+                                    .to_string();
+                        }
+                        Err(e) => {
+                            self.status = format!(
+                                "Parent mode unlocked, but could not encrypt data file: {e}"
+                            );
+                        }
+                    }
+                    return;
+                }
+            }
+
             self.status = "Parent mode unlocked.".to_string();
         } else {
             self.clear_pin_digits();
@@ -419,7 +492,15 @@ impl CofferlyApp {
             return;
         }
 
-        match save_app_data(&self.data_path, &self.data) {
+        let save_result = if self.parent_unlocked {
+            // Always save encrypted once we have a valid PIN.
+            save_encrypted(&self.data_path, &self.data, &self.data.parent_pin)
+        } else {
+            // Should not normally happen for mutable operations.
+            save_app_data(&self.data_path, &self.data)
+        };
+
+        match save_result {
             Ok(()) => self.status = success_status.into(),
             Err(err) => self.status = format!("Could not save: {err}"),
         }

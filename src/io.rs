@@ -107,6 +107,20 @@ fn load_app_data(path: &PathBuf) -> Result<AppData, String> {
     .ok_or_else(|| format!("Saved data in {} is invalid", path.display()))
 }
 
+pub fn load_raw(path: &PathBuf) -> Option<Vec<u8>> {
+    fs::read(path).ok()
+}
+
+pub fn save_encrypted(path: &PathBuf, data: &AppData, pin: &str) -> Result<(), String> {
+    let json =
+        serde_json::to_vec(data).map_err(|err| format!("Failed to serialize data: {err}"))?;
+    let encrypted = crate::crypto::encrypt(&json, pin)?;
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|err| err.to_string())?;
+    }
+    fs::write(path, encrypted).map_err(|err| err.to_string())
+}
+
 pub fn save_app_data(path: &PathBuf, data: &AppData) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|err| err.to_string())?;
