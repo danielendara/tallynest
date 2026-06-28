@@ -1,6 +1,6 @@
 use chrono::Local;
 use eframe::egui;
-use eframe::egui::{Color32, RichText};
+use eframe::egui::Color32;
 use std::path::PathBuf;
 
 mod crypto;

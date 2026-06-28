@@ -1,7 +1,6 @@
 use eframe::egui::{self, vec2, Color32, Stroke};
 
 pub const ACCENT: Color32 = Color32::from_rgb(42, 157, 143); // Teal - modern, trustworthy
-pub const ACCENT_DARK: Color32 = Color32::from_rgb(34, 128, 116);
 pub const TEXT_PRIMARY: Color32 = Color32::from_rgb(33, 37, 41);
 pub const TEXT_SECONDARY: Color32 = Color32::from_rgb(108, 117, 125);
 pub const POSITIVE: Color32 = Color32::from_rgb(40, 167, 69);
